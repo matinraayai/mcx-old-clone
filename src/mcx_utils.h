@@ -32,10 +32,10 @@
 #define _MCEXTREME_UTILITIES_H
 
 #include <stdio.h>
-#include <vector_types.h>
+#include <hip/hip_vector_types.h>
 #include "br2cu.h"
 #include "cjson/cJSON.h"
-#include "float.h"
+#include "cfloat"
 #include "nifti1.h"
 
 #ifdef _OPENMP                      ///< use multi-threading for running simulation on multiple GPUs

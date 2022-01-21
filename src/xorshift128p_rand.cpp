@@ -23,7 +23,7 @@
 *******************************************************************************/
 
 /***************************************************************************//**
-\file    xorshift128p_rand.cu
+\file    xorshift128p_rand.cpp
 
 @brief    A Random Number Generator based on the xorshift128+ algorithm 
 *******************************************************************************/
@@ -31,17 +31,12 @@
 #ifndef _MCEXTREME_XORSHIFT128PLUS_RAND_H
 #define _MCEXTREME_XORSHIFT128PLUS_RAND_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <float.h>
-#include <stdint.h>
-
-#if defined(__clang__) || defined(_MSC_VER)
-  #include "mcx_ieee754.h"
-#else
-  #include <ieee754.h>
-#endif
+#include <cmath>
+#include <cfloat>
+#include <cstdint>
+#include <hip/hip_runtime.h>
+#include "mcx_utils.h"
+#include "mcx_ieee754.h"
 
 #define MCX_RNG_NAME       "xorshift128+"
 

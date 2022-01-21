@@ -34,15 +34,13 @@
 #define _BSD_SOURCE
 
 #ifndef USE_OS_TIMER          /**< use CUDA event for time estimation */
-#include <cuda.h>
-#include <driver_types.h>
-#include <cuda_runtime_api.h>
+#include <hip/hip_runtime_api.h>
 #define MAX_DEVICE 256
 
-static cudaEvent_t timerStart[MAX_DEVICE], timerStop[MAX_DEVICE];
+static hipEvent_t timerStart[MAX_DEVICE], timerStop[MAX_DEVICE];
 
 /**
- * @brief CUDA timing function using cudaEventElapsedTime
+ * @brief CUDA timing function using hipEventElapsedTime
  *
  * Use CUDA events to query elapsed time in ms between two events
  */
@@ -50,10 +48,10 @@ static cudaEvent_t timerStart[MAX_DEVICE], timerStop[MAX_DEVICE];
 unsigned int GetTimeMillis () {
   float elapsedTime;
   int devid;
-  cudaGetDevice(&devid);
-  cudaEventRecord(timerStop[devid],0);
-  cudaEventSynchronize(timerStop[devid]);
-  cudaEventElapsedTime(&elapsedTime, timerStart[devid], timerStop[devid]);
+  hipGetDevice(&devid);
+  hipEventRecord(timerStop[devid],nullptr);
+  hipEventSynchronize(timerStop[devid]);
+  hipEventElapsedTime(&elapsedTime, timerStart[devid], timerStop[devid]);
   return (unsigned int)(elapsedTime);
 }
 
@@ -63,11 +61,11 @@ unsigned int GetTimeMillis () {
 
 unsigned int StartTimer () {
   int devid;
-  cudaGetDevice(&devid);
-  cudaEventCreate(timerStart+devid);
-  cudaEventCreate(timerStop+devid);
+  hipGetDevice(&devid);
+  hipEventCreate(timerStart+devid);
+  hipEventCreate(timerStop+devid);
 
-  cudaEventRecord(timerStart[devid],0);
+  hipEventRecord(timerStart[devid],nullptr);
   return 0;
 }
 

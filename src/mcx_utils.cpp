@@ -27,13 +27,13 @@
 
 @brief   Simulation configuration and command line option handling
 *******************************************************************************/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
 #include <errno.h>
+#include <hip/hip_runtime.h>
 
 #ifndef WIN32
   #include <sys/ioctl.h>
@@ -270,7 +270,7 @@ void mcx_initcfg(Config *cfg){
      cfg->zipid=zmZlib;
      cfg->omega=0.f;
      /*cfg->his=(History){{'M','C','X','H'},1,0,0,0,0,0,0,1.f,{0,0,0,0,0,0,0}};*/   /** This format is only supported by C99 */
-     memset(&cfg->his,0,sizeof(History));
+     memset((void*)&cfg->his,0,sizeof(History));
      memcpy(cfg->his.magic,"MCXH",4);
      cfg->his.version=1;
      cfg->his.unitinmm=1.f;
@@ -311,8 +311,8 @@ void mcx_initcfg(Config *cfg){
      cfg->invcdf=NULL;
      memset(cfg->jsonfile,0,MAX_PATH_LENGTH);
      memset(cfg->bc,0,12);
-     memset(&(cfg->srcparam1),0,sizeof(float4));
-     memset(&(cfg->srcparam2),0,sizeof(float4));
+     memset((void*) &(cfg->srcparam1),0,sizeof(float4));
+     memset((void*) &(cfg->srcparam2),0,sizeof(float4));
      memset(cfg->deviceid,0,MAX_DEVICE);
      memset(cfg->workload,0,MAX_DEVICE*sizeof(float));
      cfg->deviceid[0]='1';  /** use the first GPU device by default*/
@@ -331,7 +331,7 @@ void mcx_initcfg(Config *cfg){
 
 void mcx_cleargpuinfo(GPUInfo **gpuinfo){
     if(*gpuinfo){
-	free(*gpuinfo);
+	free((void*)*gpuinfo);
 	*gpuinfo=NULL;
     }
 }
@@ -344,9 +344,9 @@ void mcx_cleargpuinfo(GPUInfo **gpuinfo){
 
 void mcx_clearcfg(Config *cfg){
      if(cfg->medianum)
-     	free(cfg->prop);
+     	free(static_cast<void*>(cfg->prop));
      if(cfg->detnum)
-     	free(cfg->detpos);
+     	free(static_cast<void*>(cfg->detpos));
      if(cfg->dim.x && cfg->dim.y && cfg->dim.z)
         free(cfg->vol);
      if(cfg->srcpattern)
@@ -498,7 +498,7 @@ void mcx_savebnii(float *vol, int ndim, uint *dims, float *voxelsize, char* name
 
      for(int i=0;i<ndim;i++)
          datalen*=dims[i];
-     jsonstr=malloc(datalen<<1);
+     jsonstr=static_cast<uchar*>(malloc(datalen<<1));
      root=ubjw_open_memory(jsonstr,jsonstr+(datalen<<1));
      
      /* the "NIFTIHeader" section */
@@ -573,7 +573,7 @@ void mcx_savebnii(float *vol, int ndim, uint *dims, float *voxelsize, char* name
          
 	 /* the "NIFTIData" section stores volumetric data */
 	 ubjw_begin_object(root,UBJ_MIXED,0);
-         if(mcx_jdataencode(vol,ndim,dims,(isfloat?"single":"uint32"), 4, cfg->zipid, root, 1, cfg))
+         if(mcx_jdataencode(vol, ndim, dims, const_cast<char *>(isfloat ? "single" : "uint32"), 4, cfg->zipid, root, 1, cfg))
 	      MCX_ERROR(-1,"error when converting to JSON");
          ubjw_end(root);
      ubjw_end(root);
@@ -671,7 +671,7 @@ void mcx_savejnii(float *vol, int ndim, uint *dims, float *voxelsize, char* name
 
      /* the "NIFTIData" section stores volumetric data */
      cJSON_AddItemToObject(root, "NIFTIData",   dat = cJSON_CreateObject());
-     if(mcx_jdataencode(vol,ndim,dims,(isfloat?"single":"uint32"), 4, cfg->zipid, dat, 0, cfg))
+     if(mcx_jdataencode(vol, ndim, dims, const_cast<char *>(isfloat ? "single" : "uint32"), 4, cfg->zipid, dat, 0, cfg))
          MCX_ERROR(-1,"error when converting to JSON");
 
      /* now save JSON to file */
@@ -853,7 +853,7 @@ void mcx_savejdet(float *ppath, void *seeds, uint count, int doappend, Config *c
 	    char *dname[]={"photonid","p","w0"};
 	    cJSON_AddItemToObject(obj, "Trajectory", dat = cJSON_CreateObject());
 	    for(int id=0;id<sizeof(colnum);id++){
-		uint dims[2]={count,colnum[id]};
+		uint dims[2]={count,static_cast<uint>(colnum[id])};
 		float *buf=(float *)calloc(dims[0]*dims[1],sizeof(float));
 		for(int i=0;i<dims[0];i++)
 		    for(int j=0;j<dims[1];j++)
@@ -865,13 +865,13 @@ void mcx_savejdet(float *ppath, void *seeds, uint count, int doappend, Config *c
 		col+=dims[1];
 	    }
 	}else{
-	    char colnum[]={1,cfg->his.maxmedia,cfg->his.maxmedia,cfg->his.maxmedia,3,3,1};
+	    char colnum[]={1,static_cast<char>(cfg->his.maxmedia),static_cast<char>(cfg->his.maxmedia),static_cast<char>(cfg->his.maxmedia),3,3,1};
 	    char *dtype[]={"uint32","uint32","single","single","single","single","single"};
 	    char *dname[]={"detid","nscat","ppath","mom","p","v","w0"};
 	    cJSON_AddItemToObject(obj, "PhotonData", dat = cJSON_CreateObject());
 	    for(int id=0;id<sizeof(colnum);id++){
 	      if((cfg->savedetflag >> id) & 0x1){
-		uint dims[2]={count,colnum[id]};
+		uint dims[2]={count,static_cast<uint>(colnum[id])};
 		void *val=NULL;
 		float *fbuf=NULL;
 		uint  *ibuf=NULL;
@@ -938,7 +938,7 @@ void mcx_savejdet(float *ppath, void *seeds, uint count, int doappend, Config *c
  */
 
 void mcx_printlog(Config *cfg, char *str){
-     if(cfg->flog>0){ /*stdout is 1*/
+     if(fileno(cfg->flog)>0){ /*stdout is 1*/
          MCX_FPRINTF(cfg->flog,"%s\n",str);
      }
 }
@@ -1037,7 +1037,7 @@ void mcx_error(const int id,const char *msg,const char *file,const int linenum){
      mcx_throw_exception(id,msg,file,linenum);
 #else
      MCX_FPRINTF(stdout,S_RED "\nMCX ERROR(%d):%s in unit %s:%d\n" S_RESET,id,msg,file,linenum);
-     if(id==-CUDA_ERROR_LAUNCH_FAILED){
+     if(id==-hipErrorLaunchFailure){
          MCX_FPRINTF(stdout,S_RED "MCX is terminated by your graphics driver. If you use windows, \n\
 please modify TdrDelay value in the registry. Please checkout FAQ #1 for more details:\n\
 URL: http://mcx.space/wiki/index.cgi?Doc/FAQ\n" S_RESET);
@@ -1483,8 +1483,8 @@ void mcx_loadconfig(FILE *in, Config *cfg){
      	cfg->crop1.y=MIN((uint)(cfg->srcpos.y+cfg->sradius),cfg->dim.y-1);
      	cfg->crop1.z=MIN((uint)(cfg->srcpos.z+cfg->sradius),cfg->dim.z-1);
      }else if(cfg->sradius==0.f){
-     	memset(&(cfg->crop0),0,sizeof(uint3));
-     	memset(&(cfg->crop1),0,sizeof(uint3));
+     	memset((void*)&(cfg->crop0),0,sizeof(uint3));
+     	memset((void*)&(cfg->crop1),0,sizeof(uint3));
      }else{
         /*
            if -R is followed by a negative radius, mcx uses crop0/crop1 to set the cachebox
@@ -1646,7 +1646,7 @@ int mcx_loadjson(cJSON *root, Config *cfg){
            if(med){
              cfg->medianum=cJSON_GetArraySize(meds);
 	     if(cfg->prop)
-	         free(cfg->prop);
+	         free((void*) cfg->prop);
              cfg->prop=(Medium*)malloc(sizeof(Medium)*cfg->medianum);
              for(i=0;i<cfg->medianum;i++){
 	       if(cJSON_IsObject(med)){
@@ -1727,7 +1727,7 @@ int mcx_loadjson(cJSON *root, Config *cfg){
 	           cfg->steps.x=-2.0f;
 	       else
 	           MCX_ERROR(-1,"Domain::VoxelSize::Dx has incorrect element numbers");
-	       cfg->dx=malloc(sizeof(float)*len);
+	       cfg->dx= static_cast<float *>(malloc(sizeof(float) * len));
 	       vv=val->child;
 	       for(i=0;i<len;i++){
 	          cfg->dx[i]=vv->valuedouble;
@@ -1743,7 +1743,7 @@ int mcx_loadjson(cJSON *root, Config *cfg){
 	           cfg->steps.y=-2.0f;
 	       else
 	           MCX_ERROR(-1,"Domain::VoxelSize::Dy has incorrect element numbers");
-	       cfg->dy=malloc(sizeof(float)*len);
+	       cfg->dy= static_cast<float *>(malloc(sizeof(float) * len));
 	       vv=val->child;
 	       for(i=0;i<len;i++){
 	          cfg->dy[i]=vv->valuedouble;
@@ -1759,7 +1759,7 @@ int mcx_loadjson(cJSON *root, Config *cfg){
 	           cfg->steps.z=-2.0f;
 	       else
 	           MCX_ERROR(-1,"Domain::VoxelSize::Dz has incorrect element numbers");
-	       cfg->dz=malloc(sizeof(float)*len);
+	       cfg->dz= static_cast<float *>(malloc(sizeof(float) * len));
 	       vv=val->child;
 	       for(i=0;i<len;i++){
 	          cfg->dz[i]=vv->valuedouble;
@@ -1798,8 +1798,8 @@ int mcx_loadjson(cJSON *root, Config *cfg){
      	   cfg->crop1.y=MIN((uint)(cfg->srcpos.y+cfg->sradius),cfg->dim.y-1);
      	   cfg->crop1.z=MIN((uint)(cfg->srcpos.z+cfg->sradius),cfg->dim.z-1);
 	}else if(cfg->sradius==0.f){
-     	   memset(&(cfg->crop0),0,sizeof(uint3));
-     	   memset(&(cfg->crop1),0,sizeof(uint3));
+     	   memset((void*)&(cfg->crop0),0,sizeof(uint3));
+     	   memset((void*)&(cfg->crop1),0,sizeof(uint3));
 	}else{
            /*
               if -R is followed by a negative radius, mcx uses crop0/crop1 to set the cachebox
@@ -1956,13 +1956,13 @@ int mcx_loadjson(cJSON *root, Config *cfg){
 	if(!flagset['V'])  cfg->isspecular=FIND_JSON_KEY("DoSpecular","Session.DoSpecular",Session,cfg->isspecular,valueint);
 	if(!flagset['D']){
 	    if(FIND_JSON_KEY("DebugFlag","Session.DebugFlag",Session,"",valuestring))
-	       cfg->debuglevel=mcx_parsedebugopt(FIND_JSON_KEY("DebugFlag","Session.DebugFlag",Session,"",valuestring),debugflag);
+	       cfg->debuglevel=mcx_parsedebugopt(const_cast<char*>(FIND_JSON_KEY("DebugFlag","Session.DebugFlag",Session,"",valuestring)),debugflag);
 	    else
 	       cfg->debuglevel=FIND_JSON_KEY("DebugFlag","Session.DebugFlag",Session,0,valueint);
 	}
 	if(!flagset['w']){
 	    if(FIND_JSON_KEY("SaveDataMask","Session.SaveDataMask",Session,"DP",valuestring))
-	        cfg->savedetflag=mcx_parsedebugopt(FIND_JSON_KEY("SaveDataMask","Session.SaveDataMask",Session,"DP",valuestring),saveflag);
+	        cfg->savedetflag=mcx_parsedebugopt(const_cast<char*>(FIND_JSON_KEY("SaveDataMask","Session.SaveDataMask",Session,"DP",valuestring)),saveflag);
 	    else
 	        cfg->savedetflag=FIND_JSON_KEY("SaveDataMask","Session.SaveDataMask",Session,5,valueint);
 	}
@@ -2200,7 +2200,7 @@ void mcx_savejdata(char *filename, Config *cfg){
 	 }
 
 	 obj = cJSON_CreateObject();
-	 ret=mcx_jdataencode(buf,3,&cfg->dim.x,(cfg->mediabyte==1 ? "uint8" : (cfg->mediabyte==2 ? "uint16" : "uint32")),
+	 ret=mcx_jdataencode(buf,3,&cfg->dim.x,const_cast<char*>((cfg->mediabyte==1 ? "uint8" : (cfg->mediabyte==2 ? "uint16" : "uint32"))),
 	     outputbytes/datalen, cfg->zipid, obj, 0, cfg);
          if(buf)
              free(buf);
@@ -2810,7 +2810,7 @@ void mcx_dumpmask(Config *cfg){
          uint dims[]={cfg->dim.x,cfg->dim.y,cfg->dim.z};
 	 size_t datalen=sizeof(uint)*cfg->dim.x*cfg->dim.y*cfg->dim.z;
          float voxelsize[]={cfg->steps.x,cfg->steps.y,cfg->steps.z};
-	 uint *buf=malloc(datalen);
+	 uint *buf=static_cast<uint*>(malloc(datalen));
 	 memcpy(buf,cfg->vol,datalen);
 	 mcx_convertcol2row((uint **)(&buf), (uint3 *)dims);
 	 if(cfg->outputformat==ofJNifti)
@@ -3434,7 +3434,7 @@ int mcx_parsedebugopt(char *debugopt,const char *debugflag){
     int debuglevel=0;
 
     while(*c){
-       p=strchr(debugflag, ((*c<='z' && *c>='a') ? *c-'a'+'A' : *c) );
+       p=const_cast<char*>(strchr(debugflag, ((*c<='z' && *c>='a') ? *c-'a'+'A' : *c) ));
        if(p!=NULL)
           debuglevel |= (1 << (p-debugflag));
        c++;
@@ -3452,7 +3452,7 @@ int mcx_parsedebugopt(char *debugopt,const char *debugflag){
 
 int mcx_keylookup(char *origkey, const char *table[]){
     int i=0;
-    char *key=malloc(strlen(origkey)+1);
+    char *key=static_cast<char*>(malloc(strlen(origkey)+1));
     memcpy(key,origkey,strlen(origkey)+1);
     while(key[i]){
         key[i]=tolower(key[i]);
@@ -3587,7 +3587,7 @@ void mcx_usage(Config *cfg,char *exename){
      printf("\n\
 usage: %s <param1> <param2> ...\n\
 where possible parameters include (the first value in [*|*] is the default)\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == Required option ==\n" S_RESET"\
  -f config     (--input)       read an input file in .json or .inp format\n\
                                if the string starts with '{', it is parsed as\n\
@@ -3595,7 +3595,7 @@ where possible parameters include (the first value in [*|*] is the default)\n\
       or\n\
  --bench ['cube60','skinvessel',..] run a buint-in benchmark specified by name\n\
                                run --bench without parameter to get a list\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == MC options ==\n" S_RESET"\
  -n [0|int]    (--photon)      total photon number (exponential form accepted)\n\
                                max accepted value:9.2234e+18 on 64bit systems\n\
@@ -3634,7 +3634,7 @@ where possible parameters include (the first value in [*|*] is the default)\n\
  -V [0|1]      (--specular)    1 source located in the background,0 inside mesh\n\
  -e [0.|float] (--minenergy)   minimum energy level to trigger Russian roulette\n\
  -g [1|int]    (--gategroup)   number of maximum time gates per run\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == GPU options ==\n" S_RESET"\
  -L            (--listgpu)     print GPU information only\n\
  -t [16384|int](--thread)      total thread number\n\
@@ -3647,7 +3647,7 @@ where possible parameters include (the first value in [*|*] is the default)\n\
  -I            (--printgpu)    print GPU information and run program\n\
  --atomic [1|0]                1: use atomic operations to avoid thread racing\n\
                                0: do not use atomic operation (not recommended)\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == Input options ==\n" S_RESET"\
  -P '{...}'    (--shapes)      a JSON string for additional shapes in the grid.\n\
                                only the root object named 'Shapes' is parsed \n\
@@ -3680,7 +3680,7 @@ where possible parameters include (the first value in [*|*] is the default)\n\
 			     104 or muamus_short: 2x short gray-levels for mua/s\n\
 			        {[s:mua][s:mus]}; 0-65535 mixing prop types 1&2\n\
  -a [0|1]      (--array)       1 for C array (row-major); 0 for Matlab array\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == Output options ==\n" S_RESET"\
  -s sessionid  (--session)     a string to label all output file names\n\
  -O [X|XFEJPMR] (--outputtype) X - output flux, F - fluence, E - energy density\n\
@@ -3740,13 +3740,13 @@ where possible parameters include (the first value in [*|*] is the default)\n\
 			       name is specified; by default, prints settings\n\
 			       after pre-processing; '--dumpjson 2' prints \n\
 			       raw inputs before pre-processing\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == User IO options ==\n" S_RESET"\
  -h            (--help)        print this message\n\
  -v            (--version)     print MCX revision number\n\
  -l            (--log)         print messages to a log file instead\n\
  -i 	       (--interactive) interactive mode\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == Debug options ==\n" S_RESET"\
  -D [0|int]    (--debug)       print debug information (you can use an integer\n\
   or                           or a string by combining the following flags)\n\
@@ -3754,7 +3754,7 @@ where possible parameters include (the first value in [*|*] is the default)\n\
     /case insensitive/         2 M  store photon trajectory info\n\
                                4 P  print progress bar\n\
       combine multiple items by using a string, or add selected numbers together\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == Additional options ==\n" S_RESET"\
  --root         [''|string]    full path to the folder storing the input files\n\
  --gscatter     [1e9|int]      after a photon completes the specified number of\n\
@@ -3767,19 +3767,19 @@ where possible parameters include (the first value in [*|*] is the default)\n\
  --maxjumpdebug [10000000|int] when trajectory is requested (i.e. -D M),\n\
                                use this parameter to set the maximum positions\n\
                                stored (default: 1e7)\n\
-\n"S_BOLD S_CYAN"\
+\n" S_BOLD S_CYAN"\
 == Example ==\n" S_RESET"\
-example: (list built-in benchmarks)\n"S_GREEN"\
+example: (list built-in benchmarks)\n" S_GREEN"\
        %s --bench\n" S_RESET"\
-or (list supported GPUs on the system)\n"S_GREEN"\
+or (list supported GPUs on the system)\n" S_GREEN"\
        %s -L\n" S_RESET"\
-or (use multiple devices - 1st,2nd and 4th GPUs - together with equal load)\n"S_GREEN"\
+or (use multiple devices - 1st,2nd and 4th GPUs - together with equal load)\n" S_GREEN"\
        %s --bench cube60b -n 1e7 -G 1101 -W 10,10,10\n" S_RESET"\
-or (use inline domain definition)\n"S_GREEN"\
+or (use inline domain definition)\n" S_GREEN"\
        %s -f input.json -P '{\"Shapes\":[{\"ZLayers\":[[1,10,1],[11,30,2],[31,60,3]]}]}'\n" S_RESET"\
-or (use inline json setting modifier)\n"S_GREEN"\
+or (use inline json setting modifier)\n" S_GREEN"\
        %s -f input.json -j '{\"Optode\":{\"Source\":{\"Type\":\"isotropic\"}}}'\n" S_RESET"\
-or (dump simulation in a single json file)\n"S_GREEN"\
+or (dump simulation in a single json file)\n" S_GREEN"\
        %s --bench cube60planar --dumpjson" S_RESET"\n",
               exename,exename,exename,exename,exename,exename,exename);
 }

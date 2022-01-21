@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <hip/hip_runtime.h>
 
 #define MCX_RNG_NAME       "Logistic-Lattice LL3"
 

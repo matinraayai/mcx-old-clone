@@ -28,11 +28,12 @@
 @brief   mex function for MCXLAB
 *******************************************************************************/
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <exception>
-#include <time.h>
-#include <math.h>
+#include <ctime>
+#include <cmath>
+#include <hip/hip_runtime.h>
 
 #include "mex.h"
 #include "mcx_const.h"
@@ -636,7 +637,7 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
             mexErrMsgTxt("the 'detpos' field must have 4 columns (x,y,z,radius)");
         double *val=mxGetPr(item);
         cfg->detnum=arraydim[0];
-	if(cfg->detpos) free(cfg->detpos);
+	if(cfg->detpos) free((void*)cfg->detpos);
         cfg->detpos=(float4 *)malloc(cfg->detnum*sizeof(float4));
         for(j=0;j<4;j++)
           for(i=0;i<cfg->detnum;i++)
@@ -648,7 +649,7 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
             mexErrMsgTxt("the 'prop' field must have 4 columns (mua,mus,g,n)");
         double *val=mxGetPr(item);
         cfg->medianum=arraydim[0];
-        if(cfg->prop) free(cfg->prop);
+        if(cfg->prop) free((void*)cfg->prop);
         cfg->prop=(Medium *)malloc(cfg->medianum*sizeof(Medium));
         for(j=0;j<4;j++)
           for(i=0;i<cfg->medianum;i++)

@@ -49,6 +49,7 @@
 
 #ifndef _MCEXTREME_MT_RAND_H
 #define _MCEXTREME_MT_RAND_H
+#include <hip/hip_runtime.h>
 
 #define NVG80                           /* For Nvidia G80 achitecture where mod is VERY slow */
 

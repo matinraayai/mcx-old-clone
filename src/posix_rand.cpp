@@ -25,12 +25,10 @@
 #ifndef _MCEXTREME_POSIX_RAND_H
 #define _MCEXTREME_POSIX_RAND_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <float.h>
+#include <cmath>
 #include <ieee754.h>
-#include <stdint.h>
+#include <cstdint>
+#include <hip/hip_runtime.h>
 
 #define MCX_RNG_NAME       "POSIX erand48"
 

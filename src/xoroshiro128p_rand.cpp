@@ -23,7 +23,7 @@
 *******************************************************************************/
 
 /***************************************************************************//**
-\file    xoroshiro128p_rand.cu
+\file    xoroshiro128p_rand.cpp
 
 @brief    A Random Number Generator based on the xoroshiro128+ algorithm 
 *******************************************************************************/
@@ -31,17 +31,13 @@
 #ifndef _MCEXTREME_XOROSHIRO128PLUS_RAND_H
 #define _MCEXTREME_XOROSHIRO128PLUS_RAND_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <float.h>
-#include <stdint.h>
+#include <cmath>
+#include <cfloat>
+#include <cstdint>
+#include <hip/hip_runtime.h>
+#include "mcx_utils.h"
+#include "mcx_ieee754.h"
 
-#if defined(__clang__) || defined(_MSC_VER)
-  #include "mcx_ieee754.h"
-#else
-  #include <ieee754.h>
-#endif
 
 #define MCX_RNG_NAME       "xoroshiro128+"
 
@@ -129,7 +125,7 @@ __device__ void gpu_rng_reseed(RandType t[RAND_BUF_LEN],uint cpuseed[],uint idx,
  * @brief Generate exponentially distributed unitless scattering length
  */
 __device__ float rand_next_scatlen(RandType t[RAND_BUF_LEN]){
-    return -logf(rand_uniform01(t)+EPS);
+    return -logf(rand_uniform01(t) + EPS);
 }
 
 /**

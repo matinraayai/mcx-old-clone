@@ -4,7 +4,7 @@
 #  2009/04/02
 #################################################################
 
-BACKEND ?= cuda
+BACKEND ?= hip
 
 ROOTDIR ?= ..
 MCXDIR  ?= $(ROOTDIR)
@@ -16,9 +16,9 @@ endif
 
 MKDIR      := mkdir
 
-CUDACC=nvcc
+CUDACC=hipcc
 MEX=mex
-AR=$(CXX)
+AR=$(CUDACC)
 
 GCC?=gcc
 
@@ -245,10 +245,13 @@ $(OUTPUT_DIR)/$(BINARY): $(OBJS)
 %$(OBJSUFFIX): %.c
 	$(CC) $(INCLUDEDIRS) $(CPPOPT) -c -o $@  $<
 
-mcx_bench$(OBJSUFFIX): mcx_bench.c
+mcx_bench$(OBJSUFFIX): mcx_bench.cpp
 	$(GCC) $(INCLUDEDIRS) -c -o mcx_bench$(OBJSUFFIX)  $<
 
-%$(OBJSUFFIX): %.cu
+%$(OBJSUFFIX): %.cu.cpp
+	$(CUDACC) -c $(CUCCOPT) -o $@  $<
+
+%$(OBJSUFFIX): %.cpp
 	$(CUDACC) -c $(CUCCOPT) -o $@  $<
 
 $(ZMATLIB):

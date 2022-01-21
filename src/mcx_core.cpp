@@ -1,3 +1,4 @@
+#include "hip/hip_runtime.h"
 /***************************************************************************//**
 **  \mainpage Monte Carlo eXtreme - GPU accelerated Monte Carlo Photon Migration
 **
@@ -47,7 +48,7 @@ This unit is written with CUDA-C and shall be compiled using nvcc in cuda-toolki
 #include "mcx_const.h"
 
 //#ifdef USE_HALF                     //< use half-precision for ray-tracing
-    #include "cuda_fp16.h"
+    #include "hip/hip_fp16.h"
 //#endif
 
 #ifdef USE_DOUBLE
@@ -67,7 +68,7 @@ This unit is written with CUDA-C and shall be compiled using nvcc in cuda-toolki
 #elif defined(USE_POSIX_RAND)
     #include "posix_rand.cu"        //< Use USE_POSIX_RAND to enable POSIX erand48 RNG (POSIX)
 #else                               //< The default RNG method is use xorshift128+ RNG (XORSHIFT128P)
-    #include "xorshift128p_rand.cu"
+    #include "xorshift128p_rand.cpp"
 #endif
 
 #ifdef _OPENMP                      //< If compiled with -fopenmp with GCC, this enables OpenMP multi-threading for running simulation on multiple GPUs
@@ -90,11 +91,11 @@ __device__ float3 operator +(const float3 &a, const float3 &b){
  * @brief Increatment a float3 vector by another float3, a+=b
  */
 
-__device__ void operator +=(float3 &a, const float3 &b){
-	a.x += b.x;
-	a.y += b.y;
-	a.z += b.z;
-}
+//__device__ void operator +=(float3 &a, const float3 &b){
+//	a.x += b.x;
+//	a.y += b.y;
+//	a.z += b.z;
+//}
 
 /**
  * @brief Subtracting two float3 vectors c=a+b
@@ -188,7 +189,7 @@ extern __shared__ char sharedmem[];
  * also need to change all media[idx1d] to tex1Dfetch() below
  */
 
-//texture<uchar, 1, cudaReadModeElementType> texmedia;
+//texture<uchar, 1, hipReadModeElementType> texmedia;
 
 /**
  * @brief Floating-point atomic addition
@@ -963,7 +964,7 @@ __device__ inline int launchnewphoton(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,
           ppath[gcfg->partialdata]+=p->w;  //< sum all the remaining energy
 
           if(gcfg->debuglevel & MCX_DEBUG_MOVE)
-              savedebugdata(p,((uint)f->ndone)+threadid*gcfg->threadphoton+umin(threadid,(threadid<gcfg->oddphotons)*threadid),gdebugdata);
+              savedebugdata(p,((uint)f->ndone)+threadid*gcfg->threadphoton+min(threadid,(threadid<gcfg->oddphotons)*threadid),gdebugdata);
 
           if(*mediaid==0 && *idx1d!=OUTSIDE_VOLUME_MIN && *idx1d!=OUTSIDE_VOLUME_MAX && gcfg->issaveref){
             if(gcfg->issaveref==1){
@@ -1336,7 +1337,7 @@ __device__ inline int launchnewphoton(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,
       f->ndone++;
       updateproperty<islabel, issvmc>(prop,*mediaid,t,*idx1d,media,(float3*)p,nuvox);
       if(gcfg->debuglevel & MCX_DEBUG_MOVE)
-          savedebugdata(p,(uint)f->ndone+threadid*gcfg->threadphoton+umin(threadid,(threadid<gcfg->oddphotons)*threadid),gdebugdata);
+          savedebugdata(p,(uint)f->ndone+threadid*gcfg->threadphoton+min(threadid,(threadid<gcfg->oddphotons)*threadid),gdebugdata);
 
       /**
         total energy enters the volume. for diverging/converting 
@@ -1618,7 +1619,7 @@ kernel void mcx_main_loop(uint media[],OutputType field[],float genergy[],uint n
 #endif
                        }
                        if(gcfg->debuglevel & MCX_DEBUG_MOVE)
-                           savedebugdata(&p,(uint)f.ndone+idx*gcfg->threadphoton+umin(idx,(idx<gcfg->oddphotons)*idx),gdebugdata);
+                           savedebugdata(&p,(uint)f.ndone+idx*gcfg->threadphoton+min(idx,(idx<gcfg->oddphotons)*idx),gdebugdata);
 	       }
 	       v.nscat=(int)v.nscat;
 	       if(issvmc) testint=1;  //< new propagation direction after scattering, enable ray-interface intersection test
@@ -1958,10 +1959,10 @@ kernel void mcx_main_loop(uint media[],OutputType field[],float genergy[],uint n
 /**
    assert cuda memory allocation result
 */
-void mcx_cu_assess(cudaError_t cuerr,const char *file, const int linenum){
-     if(cuerr!=cudaSuccess){
-         CUDA_ASSERT(cudaDeviceReset());
-         mcx_error(-(int)cuerr,(char *)cudaGetErrorString(cuerr),file,linenum);
+void mcx_cu_assess(hipError_t cuerr,const char *file, const int linenum){
+     if(cuerr!=hipSuccess){
+         CUDA_ASSERT(hipDeviceReset());
+         mcx_error(-(int)cuerr,(char *)hipGetErrorString(cuerr),file,linenum);
      }
 }
 
@@ -2034,9 +2035,9 @@ int mcx_list_gpu(Config *cfg, GPUInfo **info){
     int dev;
     int deviceCount,activedev=0;
     
-    cudaError_t cuerr=cudaGetDeviceCount(&deviceCount);
-    if(cuerr!=cudaSuccess){
-	if(cuerr==(cudaError_t)30)
+    hipError_t cuerr=hipGetDeviceCount(&deviceCount);
+    if(cuerr!=hipSuccess){
+	if(cuerr==(hipError_t)30)
             mcx_error(-(int)cuerr,"A CUDA-capable GPU is not found or configured",__FILE__,__LINE__);
         CUDA_ASSERT(cuerr);
     }
@@ -2052,8 +2053,8 @@ int mcx_list_gpu(Config *cfg, GPUInfo **info){
     }
     // scan from the first device
     for (dev = 0; dev<deviceCount; dev++) {
-        cudaDeviceProp dp;
-        CUDA_ASSERT(cudaGetDeviceProperties(&dp, dev));
+        hipDeviceProp_t dp;
+        CUDA_ASSERT(hipGetDeviceProperties(&dp, dev));
 
 	if(cfg->isgpuinfo==3)
 	   activedev++;
@@ -2197,7 +2198,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 
 #ifdef _WIN32
      /** \c updateprogress - CUDA event needed to avoid hanging on Windows, see https://forums.developer.nvidia.com/t/solved-how-to-update-host-memory-variable-from-device-during-opencl-kernel-execution/59409/5 */
-     cudaEvent_t updateprogress;
+     hipEvent_t updateprogress;
 #endif
 
      /** all pointers start with g___ are the corresponding GPU buffers to read/write host variables defined above */
@@ -2257,7 +2258,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
           mcx_error(-1,"GPU ID must be non-zero",__FILE__,__LINE__);
 	  
      /** Activate the corresponding GPU device */
-     CUDA_ASSERT(cudaSetDevice(gpuid));
+     CUDA_ASSERT(hipSetDevice(gpuid));
 
      /** Use the specified GPU's parameters, stored in gpu[gpuid] to determine the maximum time gates that it can hold */
      if(gpu[gpuid].maxgate==0 && dimxyz>0){
@@ -2401,20 +2402,20 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
            for (i=0; i<(int)(((sizeof(RandType)*RAND_BUF_LEN)>>2)); i++){
 		Pseed[i]=((rand() << 16) | (rand() << 1) | (rand() >> 14));
 	   }
-           CUDA_ASSERT(cudaMalloc((void **) &gPseed, sizeof(RandType)*RAND_BUF_LEN));
-	   CUDA_ASSERT(cudaMemcpy(gPseed, Pseed, sizeof(RandType)*RAND_BUF_LEN,  cudaMemcpyHostToDevice));
-           CUDA_ASSERT(cudaMalloc((void **) &gfield, sizeof(OutputType)*fieldlen));
-           CUDA_ASSERT(cudaMemset(gfield,0,sizeof(OutputType)*fieldlen)); // cost about 1 ms
-           CUDA_ASSERT(cudaMemcpyToSymbol(gcfg,   &param, sizeof(MCXParam), 0, cudaMemcpyHostToDevice));
+           CUDA_ASSERT(hipMalloc((void **) &gPseed, sizeof(RandType)*RAND_BUF_LEN));
+	   CUDA_ASSERT(hipMemcpy(gPseed, Pseed, sizeof(RandType)*RAND_BUF_LEN,  hipMemcpyHostToDevice));
+           CUDA_ASSERT(hipMalloc((void **) &gfield, sizeof(OutputType)*fieldlen));
+           CUDA_ASSERT(hipMemset(gfield,0,sizeof(OutputType)*fieldlen)); // cost about 1 ms
+           CUDA_ASSERT(hipMemcpyToSymbol(HIP_SYMBOL(gcfg),   &param, sizeof(MCXParam), 0, hipMemcpyHostToDevice));
 
            tic=StartTimer();
            MCX_FPRINTF(cfg->flog,"generating %lu random numbers ... \t",fieldlen); fflush(cfg->flog);
            mcx_test_rng<<<1,1>>>(gfield,gPseed);
            tic1=GetTimeMillis();
            MCX_FPRINTF(cfg->flog,"kernel complete:  \t%d ms\nretrieving random numbers ... \t",tic1-tic);
-           CUDA_ASSERT(cudaGetLastError());
+           CUDA_ASSERT(hipGetLastError());
 
-           CUDA_ASSERT(cudaMemcpy(field, gfield,sizeof(OutputType)*dimxyz*gpu[gpuid].maxgate,cudaMemcpyDeviceToHost));
+           CUDA_ASSERT(hipMemcpy(field, gfield,sizeof(OutputType)*dimxyz*gpu[gpuid].maxgate,hipMemcpyDeviceToHost));
            MCX_FPRINTF(cfg->flog,"transfer complete:\t%d ms\n\n",GetTimeMillis()-tic);  fflush(cfg->flog);
 	   if(cfg->exportfield){
 	       memcpy(cfg->exportfield,field,fieldlen*sizeof(float));
@@ -2425,12 +2426,12 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
                MCX_FPRINTF(cfg->flog,"saving data complete : %d ms\n\n",GetTimeMillis()-tic);
                fflush(cfg->flog);
            }
-	   CUDA_ASSERT(cudaFree(gfield));
-	   CUDA_ASSERT(cudaFree(gPseed));
+	   CUDA_ASSERT(hipFree(gfield));
+	   CUDA_ASSERT(hipFree(gPseed));
 	   free(field);
 	   free(Pseed);
 
-           CUDA_ASSERT(cudaDeviceReset());
+       CUDA_ASSERT(hipDeviceReset());
 }
 #pragma omp barrier
 
@@ -2456,35 +2457,35 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
        * Allocate all GPU buffers to store input or output data
        */
      if(cfg->mediabyte!=MEDIA_2LABEL_SPLIT)
-         CUDA_ASSERT(cudaMalloc((void **) &gmedia, sizeof(uint)*(cfg->dim.x*cfg->dim.y*cfg->dim.z)));
+         CUDA_ASSERT(hipMalloc((void **) &gmedia, sizeof(uint)*(cfg->dim.x*cfg->dim.y*cfg->dim.z)));
      else
-         CUDA_ASSERT(cudaMalloc((void **) &gmedia, sizeof(uint)*(2*cfg->dim.x*cfg->dim.y*cfg->dim.z)));
-     //CUDA_ASSERT(cudaBindTexture(0, texmedia, gmedia));
-     CUDA_ASSERT(cudaMalloc((void **) &gfield, sizeof(OutputType)*fieldlen*SHADOWCOUNT));
-     CUDA_ASSERT(cudaMalloc((void **) &gPpos, sizeof(float4)*gpu[gpuid].autothread));
-     CUDA_ASSERT(cudaMalloc((void **) &gPdir, sizeof(float4)*gpu[gpuid].autothread));
-     CUDA_ASSERT(cudaMalloc((void **) &gPlen, sizeof(float4)*gpu[gpuid].autothread));
-     CUDA_ASSERT(cudaMalloc((void **) &gPdet, sizeof(float)*cfg->maxdetphoton*(hostdetreclen)));
-     CUDA_ASSERT(cudaMalloc((void **) &gdetected, sizeof(uint)));
-     CUDA_ASSERT(cudaMalloc((void **) &genergy, sizeof(float)*(gpu[gpuid].autothread<<1)));
+         CUDA_ASSERT(hipMalloc((void **) &gmedia, sizeof(uint)*(2*cfg->dim.x*cfg->dim.y*cfg->dim.z)));
+     //CUDA_ASSERT(hipBindTexture(0, texmedia, gmedia));
+     CUDA_ASSERT(hipMalloc((void **) &gfield, sizeof(OutputType)*fieldlen*SHADOWCOUNT));
+     CUDA_ASSERT(hipMalloc((void **) &gPpos, sizeof(float4)*gpu[gpuid].autothread));
+     CUDA_ASSERT(hipMalloc((void **) &gPdir, sizeof(float4)*gpu[gpuid].autothread));
+     CUDA_ASSERT(hipMalloc((void **) &gPlen, sizeof(float4)*gpu[gpuid].autothread));
+     CUDA_ASSERT(hipMalloc((void **) &gPdet, sizeof(float)*cfg->maxdetphoton*(hostdetreclen)));
+     CUDA_ASSERT(hipMalloc((void **) &gdetected, sizeof(uint)));
+     CUDA_ASSERT(hipMalloc((void **) &genergy, sizeof(float)*(gpu[gpuid].autothread<<1)));
 
      /** 
        * Allocate pinned memory variable, progress, for real-time update during kernel run-time
        */
-     CUDA_ASSERT(cudaHostAlloc((void **)&progress, sizeof(int), cudaHostAllocMapped));
-     CUDA_ASSERT(cudaHostGetDevicePointer((int **)&gprogress, (int *)progress, 0));
+     CUDA_ASSERT(hipHostMalloc(&progress, sizeof(int), hipHostMallocMapped));
+     CUDA_ASSERT(hipHostGetDevicePointer((void **)&gprogress, (void *)progress, 0));
      *progress = 0;
 
      if(cfg->debuglevel & MCX_DEBUG_MOVE){
-         CUDA_ASSERT(cudaMalloc((void **) &gdebugdata, sizeof(float)*(debuglen*cfg->maxjumpdebug)));
+         CUDA_ASSERT(hipMalloc((void **) &gdebugdata, sizeof(float)*(debuglen*cfg->maxjumpdebug)));
      }
      if(cfg->issaveseed){
          seeddata=(RandType*)malloc(sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN);
-	 CUDA_ASSERT(cudaMalloc((void **) &gseeddata, sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN));
+	 CUDA_ASSERT(hipMalloc((void **) &gseeddata, sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN));
      }
      if(cfg->nphase){
-         CUDA_ASSERT(cudaMalloc((void **) &ginvcdf, sizeof(float)*cfg->nphase));
-	 CUDA_ASSERT(cudaMemcpy(ginvcdf,cfg->invcdf,sizeof(float)*cfg->nphase, cudaMemcpyHostToDevice));
+         CUDA_ASSERT(hipMalloc((void **) &ginvcdf, sizeof(float)*cfg->nphase));
+	 CUDA_ASSERT(hipMemcpy(ginvcdf,cfg->invcdf,sizeof(float)*cfg->nphase, hipMemcpyHostToDevice));
      }
      /** 
        * Allocate and copy data needed for photon replay, the needed variables include
@@ -2494,30 +2495,30 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
        * \c greplaydetid per-photon index for each replayed photon
        */
      if(cfg->seed==SEED_FROM_FILE){
-         CUDA_ASSERT(cudaMalloc((void **) &gPseed, sizeof(RandType)*cfg->nphoton*RAND_BUF_LEN));
-	 CUDA_ASSERT(cudaMemcpy(gPseed,cfg->replay.seed,sizeof(RandType)*cfg->nphoton*RAND_BUF_LEN, cudaMemcpyHostToDevice));
+         CUDA_ASSERT(hipMalloc((void **) &gPseed, sizeof(RandType)*cfg->nphoton*RAND_BUF_LEN));
+	 CUDA_ASSERT(hipMemcpy(gPseed,cfg->replay.seed,sizeof(RandType)*cfg->nphoton*RAND_BUF_LEN, hipMemcpyHostToDevice));
 	 if(cfg->replay.weight){
-	     CUDA_ASSERT(cudaMalloc((void **) &greplayw, sizeof(float)*cfg->nphoton));
-	     CUDA_ASSERT(cudaMemcpy(greplayw,cfg->replay.weight,sizeof(float)*cfg->nphoton, cudaMemcpyHostToDevice));
+	     CUDA_ASSERT(hipMalloc((void **) &greplayw, sizeof(float)*cfg->nphoton));
+	     CUDA_ASSERT(hipMemcpy(greplayw,cfg->replay.weight,sizeof(float)*cfg->nphoton, hipMemcpyHostToDevice));
 	 }
          if(cfg->replay.tof){
-	     CUDA_ASSERT(cudaMalloc((void **) &greplaytof, sizeof(float)*cfg->nphoton));
-	     CUDA_ASSERT(cudaMemcpy(greplaytof,cfg->replay.tof,sizeof(float)*cfg->nphoton, cudaMemcpyHostToDevice));
+	     CUDA_ASSERT(hipMalloc((void **) &greplaytof, sizeof(float)*cfg->nphoton));
+	     CUDA_ASSERT(hipMemcpy(greplaytof,cfg->replay.tof,sizeof(float)*cfg->nphoton, hipMemcpyHostToDevice));
 	 }
          if(cfg->replay.detid){
-	     CUDA_ASSERT(cudaMalloc((void **) &greplaydetid, sizeof(int)*cfg->nphoton));
-	     CUDA_ASSERT(cudaMemcpy(greplaydetid,cfg->replay.detid,sizeof(int)*cfg->nphoton, cudaMemcpyHostToDevice));
+	     CUDA_ASSERT(hipMalloc((void **) &greplaydetid, sizeof(int)*cfg->nphoton));
+	     CUDA_ASSERT(hipMemcpy(greplaydetid,cfg->replay.detid,sizeof(int)*cfg->nphoton, hipMemcpyHostToDevice));
 	 }
      }else
-         CUDA_ASSERT(cudaMalloc((void **) &gPseed, sizeof(RandType)*gpu[gpuid].autothread*RAND_BUF_LEN));
+         CUDA_ASSERT(hipMalloc((void **) &gPseed, sizeof(RandType)*gpu[gpuid].autothread*RAND_BUF_LEN));
 
      /** 
        * Allocate and copy source pattern buffer for 2D and 3D pattern sources
        */
      if(cfg->srctype==MCX_SRC_PATTERN)
-         CUDA_ASSERT(cudaMalloc((void **) &gsrcpattern, sizeof(float)*(int)(cfg->srcparam1.w*cfg->srcparam2.w*cfg->srcnum)));
+         CUDA_ASSERT(hipMalloc((void **) &gsrcpattern, sizeof(float)*(int)(cfg->srcparam1.w*cfg->srcparam2.w*cfg->srcnum)));
      else if(cfg->srctype==MCX_SRC_PATTERN3D)
-         CUDA_ASSERT(cudaMalloc((void **) &gsrcpattern, sizeof(float)*(int)(cfg->srcparam1.x*cfg->srcparam1.y*cfg->srcparam1.z*cfg->srcnum)));
+         CUDA_ASSERT(hipMalloc((void **) &gsrcpattern, sizeof(float)*(int)(cfg->srcparam1.x*cfg->srcparam1.y*cfg->srcparam1.z*cfg->srcnum)));
 	 
 #ifndef SAVE_DETECTORS
 #pragma omp master
@@ -2576,13 +2577,14 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 #pragma omp master
 {
      mcx_printheader(cfg);
-
+     int hip_version;
+     hipRuntimeGetVersion(&hip_version);
 #ifdef MCX_TARGET_NAME
-     MCX_FPRINTF(cfg->flog,"- variant name: [%s] compiled by nvcc [%d.%d] with CUDA [%d]\n",
-         "Fermi",__CUDACC_VER_MAJOR__,__CUDACC_VER_MINOR__,CUDART_VERSION);
+     MCX_FPRINTF(cfg->flog,"- HIP runtime version: [%d]\n",
+                 "Fermi", hip_version / 1000, (hip_version % 100) / 10);
 #else
-     MCX_FPRINTF(cfg->flog,"- code name: [Vanilla MCX] compiled by nvcc [%d.%d] with CUDA [%d]\n",
-         __CUDACC_VER_MAJOR__,__CUDACC_VER_MINOR__,CUDART_VERSION);
+     MCX_FPRINTF(cfg->flog,"- code name: [Vanilla MCX] with runtime version: [%d]\n",
+                 hip_version / 1000, (hip_version % 100) / 10);
 #endif
      MCX_FPRINTF(cfg->flog,"- compiled with: RNG [%s] with Seed Length [%d]\n",MCX_RNG_NAME,(int)((sizeof(RandType)*RAND_BUF_LEN)>>2));
      fflush(cfg->flog);
@@ -2600,21 +2602,21 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
      mcx_flush(cfg);
 
      if(cfg->mediabyte!=MEDIA_2LABEL_SPLIT)
-         CUDA_ASSERT(cudaMemcpy(gmedia, media, sizeof(uint)*cfg->dim.x*cfg->dim.y*cfg->dim.z, cudaMemcpyHostToDevice));
+         CUDA_ASSERT(hipMemcpy(gmedia, media, sizeof(uint)*cfg->dim.x*cfg->dim.y*cfg->dim.z, hipMemcpyHostToDevice));
      else
-         CUDA_ASSERT(cudaMemcpy(gmedia, media, sizeof(uint)*2*cfg->dim.x*cfg->dim.y*cfg->dim.z, cudaMemcpyHostToDevice));
-     CUDA_ASSERT(cudaMemcpy(genergy,energy,sizeof(float) *(gpu[gpuid].autothread<<1), cudaMemcpyHostToDevice));
+         CUDA_ASSERT(hipMemcpy(gmedia, media, sizeof(uint)*2*cfg->dim.x*cfg->dim.y*cfg->dim.z, hipMemcpyHostToDevice));
+     CUDA_ASSERT(hipMemcpy(genergy,energy,sizeof(float) *(gpu[gpuid].autothread<<1), hipMemcpyHostToDevice));
      if(cfg->srcpattern)
         if(cfg->srctype==MCX_SRC_PATTERN)
-           CUDA_ASSERT(cudaMemcpy(gsrcpattern,cfg->srcpattern,sizeof(float)*(int)(cfg->srcparam1.w*cfg->srcparam2.w*cfg->srcnum), cudaMemcpyHostToDevice));
+           CUDA_ASSERT(hipMemcpy(gsrcpattern,cfg->srcpattern,sizeof(float)*(int)(cfg->srcparam1.w*cfg->srcparam2.w*cfg->srcnum), hipMemcpyHostToDevice));
 	else if(cfg->srctype==MCX_SRC_PATTERN3D)
-	   CUDA_ASSERT(cudaMemcpy(gsrcpattern,cfg->srcpattern,sizeof(float)*(int)(cfg->srcparam1.x*cfg->srcparam1.y*cfg->srcparam1.z*cfg->srcnum), cudaMemcpyHostToDevice));
+	   CUDA_ASSERT(hipMemcpy(gsrcpattern,cfg->srcpattern,sizeof(float)*(int)(cfg->srcparam1.x*cfg->srcparam1.y*cfg->srcparam1.z*cfg->srcnum), hipMemcpyHostToDevice));
      
      /** 
        * Copy constants to the constant memory on the GPU
        */
-     CUDA_ASSERT(cudaMemcpyToSymbol(gproperty, cfg->prop,  cfg->medianum*sizeof(Medium), 0, cudaMemcpyHostToDevice));
-     CUDA_ASSERT(cudaMemcpyToSymbol(gproperty, cfg->detpos,  cfg->detnum*sizeof(float4), cfg->medianum*sizeof(Medium), cudaMemcpyHostToDevice));
+     CUDA_ASSERT(hipMemcpyToSymbol(HIP_SYMBOL(gproperty), cfg->prop,  cfg->medianum*sizeof(Medium), 0, hipMemcpyHostToDevice));
+     CUDA_ASSERT(hipMemcpyToSymbol(HIP_SYMBOL(gproperty), cfg->detpos,  cfg->detnum*sizeof(float4), cfg->medianum*sizeof(Medium), hipMemcpyHostToDevice));
 
      MCX_FPRINTF(cfg->flog,"init complete : %d ms\n",GetTimeMillis()-tic);
 
@@ -2644,7 +2646,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
        param.twin1=param.twin0+cfg->tstep*gpu[gpuid].maxgate;
 
        /** Copy param to the constant memory variable gcfg */
-       CUDA_ASSERT(cudaMemcpyToSymbol(gcfg,   &param,     sizeof(MCXParam), 0, cudaMemcpyHostToDevice));
+       CUDA_ASSERT(hipMemcpyToSymbol(HIP_SYMBOL(gcfg),   &param,     sizeof(MCXParam), 0, hipMemcpyHostToDevice));
 
        MCX_FPRINTF(cfg->flog,S_CYAN"launching MCX simulation for time window [%.2ens %.2ens] ...\n" S_RESET
            ,param.twin0*1e9,param.twin1*1e9);
@@ -2656,23 +2658,23 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
            /**
              * Each repetition, we have to reset the output buffers, including \c gfield and \c gPdet
              */
-           CUDA_ASSERT(cudaMemset(gfield,0,sizeof(OutputType)*fieldlen*SHADOWCOUNT)); // cost about 1 ms
-           CUDA_ASSERT(cudaMemset(gPdet,0,sizeof(float)*cfg->maxdetphoton*(hostdetreclen)));
+           CUDA_ASSERT(hipMemset(gfield,0,sizeof(OutputType)*fieldlen*SHADOWCOUNT)); // cost about 1 ms
+           CUDA_ASSERT(hipMemset(gPdet,0,sizeof(float)*cfg->maxdetphoton*(hostdetreclen)));
            if(cfg->issaveseed)
-	       CUDA_ASSERT(cudaMemset(gseeddata,0,sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN));
-           CUDA_ASSERT(cudaMemset(gdetected,0,sizeof(float)));
+	       CUDA_ASSERT(hipMemset(gseeddata,0,sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN));
+           CUDA_ASSERT(hipMemset(gdetected,0,sizeof(float)));
            if(cfg->debuglevel & MCX_DEBUG_MOVE){
 	       uint jumpcount=0;
-               CUDA_ASSERT(cudaMemcpyToSymbol(gjumpdebug, &jumpcount, sizeof(uint), 0, cudaMemcpyHostToDevice));
+               CUDA_ASSERT(hipMemcpyToSymbol(HIP_SYMBOL(gjumpdebug), &jumpcount, sizeof(uint), 0, hipMemcpyHostToDevice));
            }
- 	   CUDA_ASSERT(cudaMemcpy(gPpos,  Ppos,  sizeof(float4)*gpu[gpuid].autothread,  cudaMemcpyHostToDevice));
-	   CUDA_ASSERT(cudaMemcpy(gPdir,  Pdir,  sizeof(float4)*gpu[gpuid].autothread,  cudaMemcpyHostToDevice));
-	   CUDA_ASSERT(cudaMemcpy(gPlen,  Plen,  sizeof(float4)*gpu[gpuid].autothread,  cudaMemcpyHostToDevice));
+ 	   CUDA_ASSERT(hipMemcpy(gPpos,  Ppos,  sizeof(float4)*gpu[gpuid].autothread,  hipMemcpyHostToDevice));
+	   CUDA_ASSERT(hipMemcpy(gPdir,  Pdir,  sizeof(float4)*gpu[gpuid].autothread,  hipMemcpyHostToDevice));
+	   CUDA_ASSERT(hipMemcpy(gPlen,  Plen,  sizeof(float4)*gpu[gpuid].autothread,  hipMemcpyHostToDevice));
 
            if(cfg->seed!=SEED_FROM_FILE){
              for (i=0; i<gpu[gpuid].autothread*((int)(sizeof(RandType)*RAND_BUF_LEN)>>2); i++)
                Pseed[i]=((rand() << 16) | (rand() << 1) | (rand() >> 14));
-	     CUDA_ASSERT(cudaMemcpy(gPseed, Pseed, sizeof(RandType)*gpu[gpuid].autothread*RAND_BUF_LEN,  cudaMemcpyHostToDevice));
+	     CUDA_ASSERT(hipMemcpy(gPseed, Pseed, sizeof(RandType)*gpu[gpuid].autothread*RAND_BUF_LEN,  hipMemcpyHostToDevice));
            }
            /**
              * Start the clock for GPU-kernel only run-time here
@@ -2685,7 +2687,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
              * To avoid hanging, we need to use cudaEvent to force GPU to update the pinned memory for progress bar on Windows WHQL driver
              */
            if(cfg->debuglevel & MCX_DEBUG_PROGRESS)
-               CUDA_ASSERT(cudaEventCreate(&updateprogress));
+               CUDA_ASSERT(hipEventCreate(&updateprogress));
 }
 #endif
            MCX_FPRINTF(cfg->flog,"simulation run#%2d ... \n",iter+1); fflush(cfg->flog);
@@ -2742,12 +2744,12 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
            if((param.debuglevel & MCX_DEBUG_PROGRESS)){
 	     int p0 = 0, ndone=-1;
 #ifdef _WIN32
-             CUDA_ASSERT(cudaEventRecord(updateprogress));
+             CUDA_ASSERT(hipEventRecord(updateprogress));
 #endif
 	     mcx_progressbar(-0.f,cfg);
 	     do{
 #ifdef _WIN32
-               cudaEventQuery(updateprogress);
+               hipEventQuery(updateprogress);
 #endif
                /**
                  * host variable \c progress is pinned with the GPU variable \c gprogress, and can be
@@ -2773,12 +2775,12 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
            }
 }
            /**
-             * By calling \c cudaDeviceSynchronize, the host thread now waits for the completion of
+             * By calling \c hipDeviceSynchronize, the host thread now waits for the completion of
 	     * the kernel, then start retrieving all GPU output data
              */
-           CUDA_ASSERT(cudaDeviceSynchronize());
+           CUDA_ASSERT(hipDeviceSynchronize());
            /** Here, the GPU kernel is completely executed and returned */
-	   CUDA_ASSERT(cudaMemcpy(&detected, gdetected,sizeof(uint),cudaMemcpyDeviceToHost));
+	   CUDA_ASSERT(hipMemcpy(&detected, gdetected,sizeof(uint),hipMemcpyDeviceToHost));
 	   
 	   /** now we can estimate and print the GPU-kernel-only runtime */
            tic1=GetTimeMillis();
@@ -2787,16 +2789,16 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 
 	   /**
 	     * If the GPU kernel crashed or terminated by error during execution, we need
-	     * to capture it by calling \c cudaGetLastError and terminate mcx if error happens
+	     * to capture it by calling \c hipGetLastError and terminate mcx if error happens
 	     */
-           CUDA_ASSERT(cudaGetLastError());
+           CUDA_ASSERT(hipGetLastError());
 
 	   /**
 	     * Now, we start retrieving all output variables, and copy those to the corresponding host buffers
 	     */
 
            /** \c photoncount returns the actual completely simulated photons returned by GPU threads, no longer used */
-           CUDA_ASSERT(cudaMemcpy(Plen0,  gPlen,  sizeof(float4)*gpu[gpuid].autothread, cudaMemcpyDeviceToHost));
+           CUDA_ASSERT(hipMemcpy(Plen0,  gPlen,  sizeof(float4)*gpu[gpuid].autothread, hipMemcpyDeviceToHost));
            for(i=0;i<gpu[gpuid].autothread;i++)
 	      photoncount+=int(Plen0[i].w+0.5f);
 
@@ -2805,7 +2807,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 	     */
            if(cfg->debuglevel & MCX_DEBUG_MOVE){
                uint debugrec=0;
-	       CUDA_ASSERT(cudaMemcpyFromSymbol(&debugrec, gjumpdebug,sizeof(uint),0,cudaMemcpyDeviceToHost));
+	       CUDA_ASSERT(hipMemcpyFromSymbol(&debugrec, HIP_SYMBOL(gjumpdebug),sizeof(uint),0,hipMemcpyDeviceToHost));
 #pragma omp critical
 {
 	       if(debugrec>0){
@@ -2818,7 +2820,7 @@ are more than what your have specified (%d), please use the --maxjumpdebug optio
 		   }
                    debugrec=min(debugrec,cfg->maxjumpdebug);
 	           cfg->exportdebugdata=(float*)realloc(cfg->exportdebugdata,(cfg->debugdatalen+debugrec)*debuglen*sizeof(float));
-                   CUDA_ASSERT(cudaMemcpy(cfg->exportdebugdata+cfg->debugdatalen, gdebugdata,sizeof(float)*debuglen*debugrec,cudaMemcpyDeviceToHost));
+                   CUDA_ASSERT(hipMemcpy(cfg->exportdebugdata+cfg->debugdatalen, gdebugdata,sizeof(float)*debuglen*debugrec,hipMemcpyDeviceToHost));
                    cfg->debugdatalen+=debugrec;
 	       }
 }
@@ -2829,13 +2831,13 @@ are more than what your have specified (%d), please use the --maxjumpdebug optio
 	     */
 #ifdef SAVE_DETECTORS
            if(cfg->issavedet){
-           	CUDA_ASSERT(cudaMemcpy(Pdet, gPdet,sizeof(float)*cfg->maxdetphoton*(hostdetreclen),cudaMemcpyDeviceToHost));
-	        CUDA_ASSERT(cudaGetLastError());
+           	CUDA_ASSERT(hipMemcpy(Pdet, gPdet,sizeof(float)*cfg->maxdetphoton*(hostdetreclen),hipMemcpyDeviceToHost));
+	        CUDA_ASSERT(hipGetLastError());
 	        /**
 	          * If photon seeds are needed for replay, here we retrieve the seed data
 	          */
 		if(cfg->issaveseed)
-		    CUDA_ASSERT(cudaMemcpy(seeddata, gseeddata,sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN,cudaMemcpyDeviceToHost));
+		    CUDA_ASSERT(hipMemcpy(seeddata, gseeddata,sizeof(RandType)*cfg->maxdetphoton*RAND_BUF_LEN,hipMemcpyDeviceToHost));
 		if(detected>cfg->maxdetphoton){
 			MCX_FPRINTF(cfg->flog,S_RED "WARNING: the detected photon (%d) \
 is more than what your have specified (%d), please use the -H option to specify a greater number\t" S_RESET
@@ -2871,7 +2873,7 @@ is more than what your have specified (%d), please use the -H option to specify 
 	     */
            if(cfg->issave2pt){
 	       OutputType *rawfield=(OutputType*)malloc(sizeof(OutputType)*fieldlen*SHADOWCOUNT);
-               CUDA_ASSERT(cudaMemcpy(rawfield, gfield,sizeof(OutputType)*fieldlen*SHADOWCOUNT,cudaMemcpyDeviceToHost));
+               CUDA_ASSERT(hipMemcpy(rawfield, gfield,sizeof(OutputType)*fieldlen*SHADOWCOUNT,hipMemcpyDeviceToHost));
                MCX_FPRINTF(cfg->flog,"transfer complete:\t%d ms\n",GetTimeMillis()-tic);  fflush(cfg->flog);
 	       /**
 	         * If double-precision is used for output, we do not need two buffers; however, by default, we use
@@ -2910,7 +2912,7 @@ is more than what your have specified (%d), please use the -H option to specify 
        if(ABS(cfg->respin)>1)  //copy the accumulated fields back
            memcpy(field,field+fieldlen,sizeof(float)*fieldlen);
 
-       CUDA_ASSERT(cudaMemcpy(energy,genergy,sizeof(float)*(gpu[gpuid].autothread<<1),cudaMemcpyDeviceToHost));
+       CUDA_ASSERT(hipMemcpy(energy,genergy,sizeof(float)*(gpu[gpuid].autothread<<1),hipMemcpyDeviceToHost));
 #pragma omp critical
 {
        /**
@@ -2940,7 +2942,7 @@ is more than what your have specified (%d), please use the -H option to specify 
        }
 
        if(param.twin1<cfg->tend){
-            CUDA_ASSERT(cudaMemset(genergy,0,sizeof(float)*(gpu[gpuid].autothread<<1)));
+            CUDA_ASSERT(hipMemset(genergy,0,sizeof(float)*(gpu[gpuid].autothread<<1)));
        }
      } /** Here is the end of the outer-loop, over time-gate groups */
 #pragma omp barrier
@@ -3083,14 +3085,14 @@ is more than what your have specified (%d), please use the -H option to specify 
      /**
        * Copying GPU photon states back to host as Ppos, Pdir and Plen for debugging purpose is depreciated
        */
-     CUDA_ASSERT(cudaMemcpy(Ppos,  gPpos, sizeof(float4)*gpu[gpuid].autothread, cudaMemcpyDeviceToHost));
-     CUDA_ASSERT(cudaMemcpy(Pdir,  gPdir, sizeof(float4)*gpu[gpuid].autothread, cudaMemcpyDeviceToHost));
-     CUDA_ASSERT(cudaMemcpy(Plen,  gPlen, sizeof(float4)*gpu[gpuid].autothread, cudaMemcpyDeviceToHost));
+     CUDA_ASSERT(hipMemcpy(Ppos,  gPpos, sizeof(float4)*gpu[gpuid].autothread, hipMemcpyDeviceToHost));
+     CUDA_ASSERT(hipMemcpy(Pdir,  gPdir, sizeof(float4)*gpu[gpuid].autothread, hipMemcpyDeviceToHost));
+     CUDA_ASSERT(hipMemcpy(Plen,  gPlen, sizeof(float4)*gpu[gpuid].autothread, hipMemcpyDeviceToHost));
      if(cfg->seed!=SEED_FROM_FILE)
-        CUDA_ASSERT(cudaMemcpy(Pseed, gPseed,sizeof(RandType)*gpu[gpuid].autothread*RAND_BUF_LEN,   cudaMemcpyDeviceToHost));
+        CUDA_ASSERT(hipMemcpy(Pseed, gPseed,sizeof(RandType)*gpu[gpuid].autothread*RAND_BUF_LEN,   hipMemcpyDeviceToHost));
      else
-        CUDA_ASSERT(cudaMemcpy(Pseed, gPseed,sizeof(RandType)*cfg->nphoton*RAND_BUF_LEN,   cudaMemcpyDeviceToHost));
-     CUDA_ASSERT(cudaMemcpy(energy,genergy,sizeof(float)*(gpu[gpuid].autothread<<1),cudaMemcpyDeviceToHost));
+        CUDA_ASSERT(hipMemcpy(Pseed, gPseed,sizeof(RandType)*cfg->nphoton*RAND_BUF_LEN,   hipMemcpyDeviceToHost));
+     CUDA_ASSERT(hipMemcpy(energy,genergy,sizeof(float)*(gpu[gpuid].autothread<<1),hipMemcpyDeviceToHost));
 
 #pragma omp master
 {
@@ -3124,44 +3126,44 @@ is more than what your have specified (%d), please use the -H option to specify 
      /**
        * Simulation is complete, now we need clear up all GPU memory buffers
        */
-     CUDA_ASSERT(cudaFree(gmedia));
-     CUDA_ASSERT(cudaFree(gfield));
-     CUDA_ASSERT(cudaFree(gPpos));
-     CUDA_ASSERT(cudaFree(gPdir));
-     CUDA_ASSERT(cudaFree(gPlen));
-     CUDA_ASSERT(cudaFree(gPseed));
-     CUDA_ASSERT(cudaFree(genergy));
-     CUDA_ASSERT(cudaFree(gPdet));
-     CUDA_ASSERT(cudaFree(gdetected));
+     CUDA_ASSERT(hipFree(gmedia));
+     CUDA_ASSERT(hipFree(gfield));
+     CUDA_ASSERT(hipFree(gPpos));
+     CUDA_ASSERT(hipFree(gPdir));
+     CUDA_ASSERT(hipFree(gPlen));
+     CUDA_ASSERT(hipFree(gPseed));
+     CUDA_ASSERT(hipFree(genergy));
+     CUDA_ASSERT(hipFree(gPdet));
+     CUDA_ASSERT(hipFree(gdetected));
      if(cfg->nphase)
-         CUDA_ASSERT(cudaFree(ginvcdf));
+         CUDA_ASSERT(hipFree(ginvcdf));
      if(cfg->debuglevel & MCX_DEBUG_MOVE)
-         CUDA_ASSERT(cudaFree(gdebugdata));
+         CUDA_ASSERT(hipFree(gdebugdata));
      if(cfg->issaveseed){
-         CUDA_ASSERT(cudaFree(gseeddata));
+         CUDA_ASSERT(hipFree(gseeddata));
 	 free(seeddata);
      }
      if(cfg->seed==SEED_FROM_FILE){
          if(cfg->replay.weight)
-             CUDA_ASSERT(cudaFree(greplayw));
+             CUDA_ASSERT(hipFree(greplayw));
          if(cfg->replay.tof)
-             CUDA_ASSERT(cudaFree(greplaytof));
+             CUDA_ASSERT(hipFree(greplaytof));
          if(cfg->replay.detid)
-             CUDA_ASSERT(cudaFree(greplaydetid));
+             CUDA_ASSERT(hipFree(greplaydetid));
      }
 
      /**
        * The below call in theory is not needed, but it ensures the device is freed for other programs, especially on Windows
        */
-     CUDA_ASSERT(cudaDeviceReset());
+     CUDA_ASSERT(hipDeviceReset());
 
      /**
        * Lastly, free all host buffers, the simulation is complete.
        */
-     free(Ppos);
-     free(Pdir);
-     free(Plen);
-     free(Plen0);
+     free((void*)Ppos);
+     free((void*)Pdir);
+     free((void*)Plen);
+     free((void*)Plen0);
      free(Pseed);
      free(Pdet);
      free(energy);
