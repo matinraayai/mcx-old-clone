@@ -40,7 +40,7 @@ This unit is written with CUDA-C and shall be compiled using nvcc in cuda-toolki
 *******************************************************************************/
 
 #define _USE_MATH_DEFINES
-#include <cmath>
+#include <math.h>
 
 #include "br2cu.h"
 #include "mcx_core.h"
@@ -1418,7 +1418,7 @@ template <const int ispencil, const int isreflect, const int islabel, const int 
 kernel void mcx_main_loop(uint media[],OutputType field[],float genergy[],uint n_seed[],
      float4 n_pos[],float4 n_dir[],float4 n_len[],float n_det[], uint detectedphoton[], 
      float srcpattern[],float replayweight[],float photontof[],int photondetid[], 
-     RandType *seeddata,float *gdebugdata, float *ginvcdf,volatile int *gprogress){
+     RandType *seeddata,float *gdebugdata, float *ginvcdf, volatile int *gprogress){
 
      /** the 1D index of the current thread */
      int idx= blockDim.x * blockIdx.x + threadIdx.x;
@@ -2124,7 +2124,7 @@ int mcx_list_gpu(Config *cfg, GPUInfo **info){
  * @param[in] gpu: the GPU information structure
  */
 
-void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
+void mcx_run_simulation(Config *cfg, GPUInfo *gpu){
 
      int i,iter;
      float  minstep=1.f; //MIN(MIN(cfg->steps.x,cfg->steps.y),cfg->steps.z);

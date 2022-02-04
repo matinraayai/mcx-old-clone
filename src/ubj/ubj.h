@@ -187,41 +187,41 @@ void ubjrw_write_dynamic(ubjw_context_t* ctx, ubjr_dynamic_t dobj,uint8_t optimi
 
 #include<iostream>
 
-static size_t write_os(const void* data, size_t size, size_t count, void* userdata)
-{
-	size_t n = size*count;
-	reinterpret_cast<std::ostream*>(userdata)->write(data, n);
-	return n;
-}
-static void close_os(void* userdata)
-{
-	reinterpret_cast<std::ostream*>(userdata)->close();
-}
-
-static size_t read_is(void* data, size_t size, size_t count, void* userdata)
-{
-	size_t n = size*count;
-	reinterpret_cast<std::istream*>(userdata)->read(data, n);
-	return n;
-}
-static int peek_is(void* userdata)
-{
-	return reinterpret_cast<std::istream*>(userdata)->peek();
-}
-static void close_is(void* userdata)
-{
-	reinterpret_cast<std::istream*>(userdata)->close();
-}
-
-static ubjw_context_t* ubjw_open_stream(std::ostream& outstream)
-{
-	return ubjw_open_callback((void*)&outstream, write_os, close_os, NULL);
-}
-
-static ubjr_context_t* ubjr_open_stream(std::istream& instream)
-{
-	return ubjr_open_callback((void*)&instream, read_is, peek_is, close_is, NULL);
-}
+//static size_t write_os(const void* data, size_t size, size_t count, void* userdata)
+//{
+//	size_t n = size*count;
+//	reinterpret_cast<std::ostream*>(userdata)->write(data, n);
+//	return n;
+//}
+//static void close_os(void* userdata)
+//{
+//	reinterpret_cast<std::ostream*>(userdata)->close();
+//}
+//
+//static size_t read_is(void* data, size_t size, size_t count, void* userdata)
+//{
+//	size_t n = size*count;
+//	reinterpret_cast<std::istream*>(userdata)->read(data, n);
+//	return n;
+//}
+//static int peek_is(void* userdata)
+//{
+//	return reinterpret_cast<std::istream*>(userdata)->peek();
+//}
+//static void close_is(void* userdata)
+//{
+//	reinterpret_cast<std::istream*>(userdata)->close();
+//}
+//
+//static ubjw_context_t* ubjw_open_stream(std::ostream& outstream)
+//{
+//	return ubjw_open_callback((void*)&outstream, write_os, close_os, NULL);
+//}
+//
+//static ubjr_context_t* ubjr_open_stream(std::istream& instream)
+//{
+//	return ubjr_open_callback((void*)&instream, read_is, peek_is, close_is, NULL);
+//}
 
 
 

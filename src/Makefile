@@ -16,9 +16,9 @@ endif
 
 MKDIR      := mkdir
 
-CUDACC=hipcc
+HIPCC=hipcc
 MEX=mex
-AR=$(CUDACC)
+AR=$(HIPCC)
 
 GCC?=gcc
 
@@ -28,40 +28,40 @@ OUTPUT_DIR=$(MCXDIR)/bin
 
 DOXY       := doxygen
 DOCDIR     := $(MCXDIR)/doc
-DOXYCFG=mcxdoxy.cfg
-ZMATLIB    :=libzmat.a
-USERLINKOPT?=$(ZMATLIB) -lz
+DOXYCFG     = mcxdoxy.cfg
+ZMATLIB    := libzmat.a
+USERLINKOPT?= $(ZMATLIB) -lz
 
-CUDART=-lcudart
+HIPRT=-lamdhip64
 CUOMPLINK=
 
 ARCH = $(shell uname -m)
 PLATFORM = $(shell uname -s)
-CUDA_HOME ?= /usr/local/cuda
+HIP_HOME ?= /opt/rocm/hip/
 
-INCLUDEDIRS=-Izmat -Izmat/easylzma -I$(CUDA_HOME)/include -Iubj
+INCLUDEDIRS=-Izmat -Izmat/easylzma -I$(HIP_HOME)/include -Iubj
 
 ifeq ($(BACKEND),ocelot)
   LINKOPT=-L/usr/local/lib `OcelotConfig -l` -ltinfo
-  CUCCOPT=-D__STRICT_ANSI__ -g #--maxrregcount 32
+  CUCCOPT=-D__STRICT_ANSI__ -g -O3 #--maxrregcount 32
 else ifeq ($(BACKEND),cudastatic)
   ifeq ($(findstring Darwin,$(PLATFORM)), Darwin)
-      CUDART=-lcudadevrt -lcudart_static -ldl -static-libgcc -static-libstdc++
+      HIPRT=-lcudadevrt -lcudart_static -ldl -static-libgcc -static-libstdc++ -O3
   else
-      CUDART=-lcudadevrt -lcudart_static -ldl -lrt -static-libgcc -static-libstdc++
+      HIPRT=-lcudadevrt -lcudart_static -ldl -lrt -static-libgcc -static-libstdc++ -O3
   endif
-  LINKOPT=-L$(CUDA_HOME)/lib -lm $(CUDART)
-  CUCCOPT=-g -lineinfo -Xcompiler -Wall#-arch compute_20 #--maxrregcount 32
+  LINKOPT=-L$(HIP_HOME)/lib -lm $(HIPRT)
+  CUCCOPT=-g -lineinfo -Xcompiler -Wall -O3#-arch compute_20 #--maxrregcount 32
 else
-  LINKOPT=-L$(CUDA_HOME)/lib -lm $(CUDART)
-  CUCCOPT=-g -lineinfo -Xcompiler -Wall#-arch compute_20 #--maxrregcount 32
+  LINKOPT=-L$(HIP_HOME)/lib -lm $(HIPRT)
+  CUCCOPT=-g -lineinfo -Xcompiler -Wall -O3 #-arch compute_20 #--maxrregcount 32
 endif
 
 DLLFLAG=-fPIC
 OMP=-fopenmp
 CUDA_STATIC=--cudart static -Xcompiler "-static-libgcc -static-libstdc++"
 
-CPPOPT=-g -Wall -std=c99 #-DNO_LZMA # -DUSE_OS_TIMER
+CPPOPT=-g -Wall -std=c99 -O3#-DNO_LZMA # -DUSE_OS_TIMER
 
 OBJSUFFIX=.o
 EXESUFFIX=
@@ -69,12 +69,12 @@ EXESUFFIX=
 FILES=mcx_core mcx_utils mcx_shapes tictoc mcextreme mcx_bench cjson/cJSON ubj/ubjw
 
 ifeq ($(findstring CYGWIN,$(PLATFORM)), CYGWIN)
-  CC=nvcc
+  CC=hipcc
   CUOMPLINK=-Xcompiler
   ifeq ($(findstring x86_64,$(ARCH)), x86_64)
-      LINKOPT=-L"$(CUDA_PATH)/lib/x64" $(CUDART)
+      LINKOPT=-L"$(CUDA_PATH)/lib/x64" $(HIPRT)
   else
-      LINKOPT=-L"$(CUDA_PATH)/lib/Win32" $(CUDART)
+      LINKOPT=-L"$(CUDA_PATH)/lib/Win32" $(HIPRT)
   endif
   INCLUDEDIRS +=-I"$(CUDA_PATH)/lib/include"
   CPPOPT =-c -D_CRT_SECURE_NO_DEPRECATE -DWIN32 #-DNO_LZMA
@@ -97,11 +97,11 @@ else
   ifeq ($(findstring x86_64,$(ARCH)), x86_64)
      CPPOPT +=-m64
      CUCCOPT +=-m64
-     ifeq "$(wildcard $(CUDA_HOME)/lib64)" "$(CUDA_HOME)/lib64"
+     ifeq "$(wildcard $(HIP_HOME)/lib64)" "$(HIP_HOME)/lib64"
         ifeq ($(BACKEND),cuda)
-           LINKOPT=-L$(CUDA_HOME)/lib64 $(CUDART) -lm -lstdc++
+           LINKOPT=-L$(HIP_HOME)/lib64 $(HIPRT) -lm -lstdc++
         else ifeq ($(BACKEND),cudastatic)
-           LINKOPT=-L$(CUDA_HOME)/lib64 $(CUDART) -lm -static-libgcc -static-libstdc++
+           LINKOPT=-L$(HIP_HOME)/lib64 $(HIPRT) -lm -static-libgcc -static-libstdc++
         endif
      endif
   endif
@@ -215,14 +215,14 @@ OBJS      := $(addsuffix $(OBJSUFFIX), $(FILES))
 TARGETSUFFIX:=$(suffix $(BINARY))
 
 ifeq ($(TARGETSUFFIX),.so)
-        CPPOPT+= $(DLLFLAG) 
-	CUCCOPT+= -Xcompiler $(DLLFLAG) 
-        LINKOPT+= -shared -Wl,-soname,$(BINARY).1 
+        CPPOPT+= $(DLLFLAG)
+	CUCCOPT+= -Xcompiler $(DLLFLAG)
+        LINKOPT+= -shared -Wl,-soname,$(BINARY).1
 endif
 
 ifeq ($(TARGETSUFFIX),.a)
         CCFLAGS+=
-        AR         := ar  
+        AR         := ar
         ARFLAGS    := cr
         AROUTPUT   :=
         EXTRALIB   :=
@@ -249,10 +249,10 @@ mcx_bench$(OBJSUFFIX): mcx_bench.cpp
 	$(GCC) $(INCLUDEDIRS) -c -o mcx_bench$(OBJSUFFIX)  $<
 
 %$(OBJSUFFIX): %.cu.cpp
-	$(CUDACC) -c $(CUCCOPT) -o $@  $<
+	$(HIPCC) -c $(CUCCOPT) -o $@  $<
 
 %$(OBJSUFFIX): %.cpp
-	$(CUDACC) -c $(CUCCOPT) -o $@  $<
+	$(HIPCC) -c $(CUCCOPT) -o $@  $<
 
 $(ZMATLIB):
 	-$(MAKE) -C zmat lib AR=ar CPPOPT="$(DLLFLAG) -O3" USERLINKOPT=
@@ -260,7 +260,7 @@ clean:
 	-$(MAKE) -C zmat clean
 	-rm -f $(OBJS) $(OUTPUT_DIR)/$(BINARY)$(EXESUFFIX) $(OUTPUT_DIR)/$(BINARY)_atomic$(EXESUFFIX) $(OUTPUT_DIR)/$(BINARY)_det$(EXESUFFIX) $(ZMATLIB)
 cudasdk:
-	@if [ -z `which ${CUDACC}` ]; then \
+	@if [ -z `which ${HIPCC}` ]; then \
 	   echo "Please first install CUDA SDK and add the path to nvcc to your PATH environment variable."; exit 1;\
 	fi
 
